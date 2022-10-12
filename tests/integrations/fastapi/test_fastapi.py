@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sentry_sdk import capture_message
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+from sentry_sdk.scope import Scope
 
 
 def fastapi_app_factory():
@@ -135,3 +136,27 @@ def test_legacy_setup(
 
     (event,) = events
     assert event["transaction"] == "/message/{message_id}"
+
+
+def test_transaction_scope_name(
+    sentry_init,
+    capture_events,
+):
+    sentry_init(
+        traces_sample_rate=1.0,
+    )
+
+    s = Scope()
+    transaction_name = "test"
+    s.set_transaction_name(transaction_name)
+
+    app = fastapi_app_factory()
+    asgi_app = SentryAsgiMiddleware(app)
+
+    events = capture_events()
+
+    client = TestClient(asgi_app)
+    client.get("/message")
+
+    (message_event, transaction_event) = events
+    assert transaction_event["transaction"] == transaction_name
